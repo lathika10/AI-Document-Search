@@ -28,16 +28,29 @@ FAISS / Vector Search	Similarity search
 python-pptx	PPT reading
 PyPDF	PDF text extraction
 dotenv	Environment variable handling
+
+
+
 📁 Project Structure
 AI-Document-Search-RAG/
-│
-├── final_rag_project.py     # Main application
-├── requirements.txt         # Required libraries
-├── .gitignore               # Ignored files
-├── README.md                # Project documentation
-└── .env (not uploaded)      # API key
+
+
+app.py     # Main application
+
+requirements.txt         # Required libraries
+
+.gitignore               # Ignored files
+
+README.md                # Project documentation
+
+.env (not uploaded)      # API key
+
+
 
 ⚙️ Installation & Setup
+
+
+
 1️⃣ Clone the Repository
 git clone https://github.com/lathika10/AI-Document-Search-RAG.git
 cd AI-Document-Search-RAG

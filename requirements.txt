@@ -1,11 +1,9 @@
-streamlit
+streamlit==1.26.0
+langchain-groq==0.1.11
+langchain-google-genai
+langchain-community
+scikit-learn
 pypdf
 python-pptx
-scikit-learn
-langchain-community
-langchain-google-genai
-google-generativeai
+pydantic
 python-dotenv
-chromadb
-numpy
-sentence-transformers

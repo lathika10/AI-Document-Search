@@ -1,13 +1,14 @@
 import streamlit as st
 from dotenv import load_dotenv
-from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+from langchain_groq import ChatGroq
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_core.output_parsers import PydanticOutputParser
 from sklearn.metrics.pairwise import cosine_similarity
 from pydantic import BaseModel, Field
 from typing import List
 from pypdf import PdfReader
 import pptx
-import os
 
 # ----------------------------------------------------
 # PAGE CONFIG
@@ -17,30 +18,6 @@ st.set_page_config(
     page_icon="📘",
     layout="wide"
 )
-
-# ----------------------------------------------------
-# STYLES
-# ----------------------------------------------------
-st.markdown("""
-<style>
-.chat-box {
-    background-color: #f8f9fa;
-    padding: 12px;
-    border-radius: 10px;
-    margin-bottom: 10px;
-}
-.user-msg {
-    background-color: #dcf8c6;
-    padding: 10px;
-    border-radius: 8px;
-}
-.bot-msg {
-    background-color: #eeeeee;
-    padding: 10px;
-    border-radius: 8px;
-}
-</style>
-""", unsafe_allow_html=True)
 
 # ----------------------------------------------------
 # LOAD ENV
@@ -60,28 +37,83 @@ class RAGAnswer(BaseModel):
 # ----------------------------------------------------
 @st.cache_resource
 def load_models():
-    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
-    embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
+
+    # ---------- LLM ----------
+    llm = ChatGroq(
+        model="llama-3.1-8b-instant",
+        temperature=0.2,
+        max_tokens=512  # limit response tokens
+    )
+
     parser = PydanticOutputParser(pydantic_object=RAGAnswer)
-    return llm, embeddings, parser
 
-llm, embeddings, parser = load_models()
+    # ---------- Embeddings ----------
+    primary_embeddings = GoogleGenerativeAIEmbeddings(
+        model="gemini-embedding-001"
+    )
+
+    fallback_embeddings = HuggingFaceEmbeddings(
+        model_name="sentence-transformers/all-MiniLM-L6-v2",
+        model_kwargs={"device": "cpu"}  # use "cuda" if GPU available
+    )
+
+    return llm, primary_embeddings, fallback_embeddings, parser
+
+
+llm, primary_embeddings, fallback_embeddings, parser = load_models()
 
 # ----------------------------------------------------
-# FUNCTIONS
+# SILENT EMBEDDING FALLBACK
 # ----------------------------------------------------
+def safe_embed_documents(texts):
+    try:
+        return primary_embeddings.embed_documents(texts)
+    except Exception:
+        return fallback_embeddings.embed_documents(texts)
+
+
+def safe_embed_query(query):
+    try:
+        return primary_embeddings.embed_query(query)
+    except Exception:
+        return fallback_embeddings.embed_query(query)
+
+# ----------------------------------------------------
+# TEXT CHUNKING
+# ----------------------------------------------------
+def chunk_text(text, chunk_size=500, overlap=100):
+    chunks = []
+    start = 0
+    while start < len(text):
+        end = start + chunk_size
+        chunks.append(text[start:end])
+        start = end - overlap
+    return chunks
+
+
 def process_documents(text):
-    return [p.strip() for p in text.split("\n\n") if p.strip()]
+    return chunk_text(text, chunk_size=500, overlap=100)
 
+# ----------------------------------------------------
+# RAG QUERY (TOKEN SAFE)
+# ----------------------------------------------------
 def rag_query(chunks, query, top_k=3):
-    doc_embeddings = embeddings.embed_documents(chunks)
-    query_embedding = embeddings.embed_query(query)
+
+    doc_embeddings = safe_embed_documents(chunks)
+    query_embedding = safe_embed_query(query)
 
     scores = cosine_similarity([query_embedding], doc_embeddings)[0]
     top_indices = scores.argsort()[-top_k:][::-1]
 
     sources = [chunks[i] for i in top_indices]
-    context = "\n\n".join(sources)
+
+    # limit total context to prevent Groq token limit errors
+    MAX_CONTEXT_CHARS = 2000
+    context = ""
+    for src in sources:
+        if len(context) + len(src) > MAX_CONTEXT_CHARS:
+            break
+        context += src + "\n\n"
 
     prompt = f"""
 Answer ONLY from the context.
@@ -96,14 +128,13 @@ QUESTION:
 """
 
     chain = llm | parser
-    response = chain.invoke(prompt)
-    return response
+    return chain.invoke(prompt)
 
 # ----------------------------------------------------
 # UI HEADER
 # ----------------------------------------------------
 st.title("📘 AI Document Search System")
-st.caption("Upload documents and chat with them using RAG + Gemini AI")
+st.caption("Groq Llama-3.1 | Token-safe RAG with silent embedding fallback")
 
 # ----------------------------------------------------
 # FILE UPLOAD
@@ -126,7 +157,9 @@ if uploaded_files:
         elif file.type == "application/pdf":
             reader = PdfReader(file)
             for page in reader.pages:
-                full_text += page.extract_text()
+                text = page.extract_text()
+                if text:
+                    full_text += text
 
         elif file.type == "application/vnd.openxmlformats-officedocument.presentationml.presentation":
             ppt = pptx.Presentation(file)
@@ -135,7 +168,7 @@ if uploaded_files:
                     if hasattr(shape, "text"):
                         full_text += shape.text
 
-    st.sidebar.success("✅ Documents loaded successfully")
+    st.sidebar.success("✅ Documents loaded")
     st.session_state.docs = process_documents(full_text)
 
 # ----------------------------------------------------
@@ -160,7 +193,7 @@ if "docs" in st.session_state:
         )
 
         with st.chat_message("assistant"):
-            with st.spinner("🔍 Searching..."):
+            with st.spinner("🔍 Searching documents..."):
                 result = rag_query(
                     st.session_state.docs,
                     user_input
@@ -182,4 +215,4 @@ if "docs" in st.session_state:
 # FOOTER
 # ----------------------------------------------------
 st.markdown("---")
-st.markdown("✅ **RAG | Gemini AI | Streamlit | Document QA System**")
+st.markdown("✅ **Groq LLM | Token-safe | Silent embedding fallback | Streamlit**")

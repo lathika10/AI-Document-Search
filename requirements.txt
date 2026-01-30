@@ -1,9 +1,9 @@
 streamlit==1.26.0
+langchain-groq==0.1.11
+langchain-google-genai
 langchain-community
 scikit-learn
 pypdf
 python-pptx
 pydantic
 python-dotenv
-transformers
-torch

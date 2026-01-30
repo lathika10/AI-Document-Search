@@ -1,18 +1,6 @@
 import streamlit as st
 from dotenv import load_dotenv
-# from langchain_groq import ChatGroq
-from langchain_community.llms import HuggingFacePipeline
-from transformers import pipeline
-
-# Initialize HF pipeline
-pipe = pipeline(
-    "text-generation",
-    model="TheBloke/Llama-3-1-HF",
-    max_new_tokens=512,
-    temperature=0.2
-)
-llm = HuggingFacePipeline(pipeline=pipe)
-
+from langchain_groq import ChatGroq
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_core.output_parsers import PydanticOutputParser
@@ -228,4 +216,3 @@ if "docs" in st.session_state:
 # ----------------------------------------------------
 st.markdown("---")
 st.markdown("✅ **Groq LLM | Token-safe | Silent embedding fallback | Streamlit**")
-
